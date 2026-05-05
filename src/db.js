@@ -24,13 +24,16 @@ const poolConfig = {
     connectionTimeoutMillis: 2000, // Timeout al intentar obtener una conexión
 };
 
-// Si existe POSTGRES_URL o DATABASE_URL (ej. Vercel Postgres, Neon, Render), úsala.
+// Si existe POSTGRES_URL o DATABASE_URL (ej. Vercel Postgres, Neon, Render, Railway), úsala.
 const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
 
 if (connectionString) {
     poolConfig.connectionString = connectionString;
-    // La mayoría de los servicios en la nube requieren SSL
-    if (process.env.NODE_ENV === 'production' || connectionString.includes('supabase') || connectionString.includes('neon') || connectionString.includes('vercel')) {
+    // Railway no soporta SSL de forma nativa en su plugin básico.
+    // Neon, Supabase y Vercel Postgres SI requieren SSL.
+    const isRailway = connectionString.includes('railway');
+    
+    if (!isRailway && (process.env.NODE_ENV === 'production' || connectionString.includes('supabase') || connectionString.includes('neon') || connectionString.includes('vercel') || connectionString.includes('render'))) {
         poolConfig.ssl = { rejectUnauthorized: false };
     }
 } else {
