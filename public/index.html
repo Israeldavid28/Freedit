@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Freedit – Hilos con Árboles Binarios | Prog. No Numérica</title>
+  <meta name="description" content="Simulador educativo de hilos tipo Reddit usando Árboles Binarios. Materia: Programación No Numérica." />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+
+<!-- ============================================================
+     PANTALLA DE AUTENTICACIÓN
+     ============================================================ -->
+<div id="auth-screen">
+  <div class="auth-container">
+
+    <div class="auth-logo">
+      <span class="logo-icon">🤖</span>
+      <h1>Freedit</h1>
+      <p>Programación No Numérica · Árboles Binarios</p>
+    </div>
+
+    <div class="auth-card">
+      <!-- Tabs -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Iniciar sesión</button>
+        <button class="auth-tab" data-tab="register">Registrarse</button>
+      </div>
+
+      <!-- Formulario de Login -->
+      <form class="auth-form active" id="form-login" onsubmit="return false">
+        <div class="form-group">
+          <label for="login-username">Usuario</label>
+          <input type="text" id="login-username" placeholder="Tu nombre de usuario" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Contraseña</label>
+          <input type="password" id="login-password" placeholder="Tu contraseña" autocomplete="current-password" />
+        </div>
+        <div class="auth-error" id="auth-error"></div>
+        <button class="btn-auth" id="btn-login">Iniciar sesión</button>
+        <p style="font-size:0.78rem;color:var(--text-muted);text-align:center;margin-top:0.25rem">
+          Demo: usuario <code style="color:var(--accent-light)">estudiante01</code> · contraseña <code style="color:var(--accent-light)">password</code>
+        </p>
+      </form>
+
+      <!-- Formulario de Registro -->
+      <form class="auth-form" id="form-register" onsubmit="return false">
+        <div class="form-group">
+          <label for="reg-username">Nombre de usuario</label>
+          <input type="text" id="reg-username" placeholder="min. 3 caracteres, sin espacios" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Contraseña</label>
+          <input type="password" id="reg-password" placeholder="min. 6 caracteres" autocomplete="new-password" />
+        </div>
+        <div class="auth-error" id="auth-error-reg" style="display:none"></div>
+        <button class="btn-auth" id="btn-register">Crear cuenta</button>
+      </form>
+    </div>
+
+    <!-- Footer Auth -->
+    <div class="auth-footer">
+      <p><strong>Materia:</strong> Programación no numérica I</p>
+      <p><strong>Integrantes:</strong> Israel Escalona. C.I: 31.328.798 | Jesús Pooll. C.I: 31.521.586 | Fernando Yanez. C.I: 32.095.288</p>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============================================================
+     PANTALLA PRINCIPAL (FEED)
+     ============================================================ -->
+<div id="app-screen">
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a class="nav-brand" href="#">
+      <span class="brand-icon">🤖</span>
+      Free<span>dit</span>
+    </a>
+    <div class="nav-search">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Buscar en Freedit" />
+    </div>
+    <div class="nav-right">
+      <div class="nav-user">
+        <div class="avatar" id="nav-avatar">??</div>
+        <span id="nav-username"></span>
+      </div>
+      <button class="btn-logout" id="btn-logout">Salir</button>
+    </div>
+  </nav>
+
+  <!-- Contenedor principal con sidebar -->
+  <div class="reddit-container">
+    
+    <!-- Sidebar Izquierdo -->
+    <aside class="left-sidebar">
+      <div class="sidebar-menu">
+        <a href="#" class="sidebar-link active"><span class="icon">🏠</span> Inicio</a>
+        <a href="#" class="sidebar-link"><span class="icon">🔥</span> Popular</a>
+        <a href="#" class="sidebar-link"><span class="icon">🔍</span> Explorar</a>
+        <hr class="sidebar-divider" />
+        <p class="sidebar-subtitle">TUS COMUNIDADES</p>
+        <a href="#" class="sidebar-link"><span class="icon">r/</span> ProgNoNumerica</a>
+        <a href="#" class="sidebar-link"><span class="icon">r/</span> UXDesign</a>
+        <a href="#" class="sidebar-link"><span class="icon">r/</span> Programacion</a>
+      </div>
+    </aside>
+
+    <!-- Contenido principal -->
+    <main class="main-layout">
+
+    <!-- Panel educativo colapsable -->
+    <div class="edu-panel">
+      <div class="edu-panel-header" id="edu-toggle">
+        <div class="edu-panel-title">
+          <span>📚</span>
+          Concepto: Árbol Binario de Comentarios
+        </div>
+        <span style="color:var(--text-muted);font-size:0.85rem">▼ ver código</span>
+      </div>
+      <div class="edu-panel-body" id="edu-body">
+        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.75rem;line-height:1.7">
+          Cada comentario es un <strong style="color:var(--accent-light)">nodo</strong> del árbol.
+          El <strong style="color:#10b981">hijo izquierdo</strong> = primera respuesta.
+          El <strong style="color:#f59e0b">hermano derecho</strong> = siguiente comentario al mismo nivel.
+        </p>
+        <pre class="edu-code"><span class="cm">// Nodo del Árbol Binario</span>
+<span class="kw">class</span> <span class="fn">CommentNode</span> {
+  <span class="fn">constructor</span>(data) {
+    <span class="kw">this</span>.id          = data.id;
+    <span class="kw">this</span>.content     = data.content;
+    <span class="kw">this</span>.depth       = data.depth;
+    <span class="cm">// Punteros del árbol binario:</span>
+    <span class="kw">this</span>.leftChild   = <span class="kw">null</span>; <span class="cm">// primera respuesta</span>
+    <span class="kw">this</span>.rightSibling = <span class="kw">null</span>; <span class="cm">// hermano del mismo nivel</span>
+  }
+}
+
+<span class="cm">// Recorrido recursivo para renderizar</span>
+<span class="fn">_renderNode</span>(node) {
+  <span class="kw">if</span> (!node) <span class="kw">return</span>;
+  render(node);                       <span class="cm">// visitar nodo</span>
+  <span class="kw">this</span>._renderNode(node.leftChild);  <span class="cm">// recorrer hijo</span>
+  <span class="kw">this</span>._renderNode(node.rightSibling);<span class="cm">// recorrer hermano</span>
+}</pre>
+        <p style="font-size:0.78rem;color:var(--text-muted)">
+          🔷 El color del borde izquierdo de cada comentario indica su <strong>profundidad</strong> en el árbol (depth 0–10).
+        </p>
+      </div>
+    </div>
+
+    <!-- Crear nuevo post -->
+    <div class="create-post-panel">
+      <h2>✏️ Crear nuevo hilo</h2>
+      <input type="text" id="post-title-input" placeholder="Título del hilo..." maxlength="300" />
+      <textarea id="post-content-input" placeholder="¿Qué quieres compartir o preguntar?"></textarea>
+      <div class="post-actions">
+        <button class="btn-post" id="btn-create-post">Publicar</button>
+      </div>
+    </div>
+
+    <!-- Feed de posts -->
+    <div class="feed-header">
+      <h2>🔥 Hilos recientes</h2>
+    </div>
+    <div class="posts-list" id="posts-list">
+      <div class="loading-spinner">
+        <div class="spinner"></div>
+        <p>Cargando...</p>
+      </div>
+    </div>
+
+  </main>
+  </div>
+
+  <!-- Footer App -->
+  <footer class="site-footer">
+    <p><strong>Materia:</strong> Programación no numérica I</p>
+    <p><strong>Integrantes:</strong> Israel Escalona. C.I: 31.328.798 | Jesús Pooll. C.I: 31.521.586 | Fernando Yanez. C.I: 32.095.288</p>
+  </footer>
+
+</div>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<script src="/js/script.js"></script>
+</body>
+</html>
