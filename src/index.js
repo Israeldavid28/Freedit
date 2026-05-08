@@ -1,55 +1,39 @@
 
 // ============================================================
-// index.js - Servidor Principal Express
+// index.js - Servidor Principal Express (migrado a Supabase JS)
 // Materia: Programación No Numérica
 //
-// Punto de entrada de la aplicación. Configura:
-//   - Servidor HTTP con Express
-//   - Middlewares de seguridad y parsing
-//   - Rutas de la API REST
-//   - Manejo centralizado de errores
-//   - Servicio de archivos estáticos del frontend
+// Rutas de la API REST que usan @supabase/supabase-js
+// en lugar de pg directo. Elimina problemas de SSL/pooler.
 // ============================================================
 
 const express = require('express');
-const cors = require('cors');
-const path = require('path');
+const cors    = require('cors');
+const path    = require('path');
 require('dotenv').config();
 
-const { testConnection, query, withTransaction, pool } = require('./db');
+const supabase = require('./supabase');
 const { registerUser, loginUser, requireAuth } = require('./auth');
 
-const app = express();
+const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ============================================================
 // MIDDLEWARES GLOBALES
 // ============================================================
-
-// Parsear JSON en el body de las peticiones
 app.use(express.json({ limit: '10mb' }));
-
-// Parsear URL-encoded (formularios HTML)
 app.use(express.urlencoded({ extended: true }));
-
-// CORS: permitir peticiones desde el frontend (mismo origen en producción)
 app.use(cors({
     origin: process.env.NODE_ENV === 'production' ? false : '*',
     credentials: true
 }));
-
-// Servir archivos estáticos del frontend (HTML, CSS, JS del cliente)
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ============================================================
 // API ROUTES - AUTENTICACIÓN
 // ============================================================
 
-/**
- * POST /api/auth/register
- * Registrar un nuevo usuario
- * Body: { username, password }
- */
+/** POST /api/auth/register */
 app.post('/api/auth/register', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -65,11 +49,7 @@ app.post('/api/auth/register', async (req, res) => {
     }
 });
 
-/**
- * POST /api/auth/login
- * Iniciar sesión
- * Body: { username, password }
- */
+/** POST /api/auth/login */
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -85,21 +65,19 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
-/**
- * GET /api/auth/me
- * Verificar token y obtener datos del usuario actual
- * Header: Authorization: Bearer <token>
- */
+/** GET /api/auth/me */
 app.get('/api/auth/me', requireAuth, async (req, res) => {
     try {
-        const result = await query(
-            'SELECT id, username, avatar_color, created_at FROM users WHERE id = $1',
-            [req.user.id]
-        );
-        if (result.rows.length === 0) {
+        const { data: user, error } = await supabase
+            .from('users')
+            .select('id, username, avatar_color, created_at')
+            .eq('id', req.user.id)
+            .single();
+
+        if (error || !user) {
             return res.status(404).json({ error: 'Usuario no encontrado' });
         }
-        res.json({ success: true, user: result.rows[0] });
+        res.json({ success: true, user });
     } catch (error) {
         res.status(500).json({ error: 'Error interno del servidor' });
     }
@@ -111,47 +89,50 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
 
 /**
  * GET /api/posts
- * Obtener todos los posts con información del autor y conteo de comentarios
- * Paginación: ?page=1&limit=10
+ * Paginación: ?page=1&limit=20
  */
 app.get('/api/posts', requireAuth, async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
+        const page   = parseInt(req.query.page)  || 1;
+        const limit  = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
 
-        const result = await query(`
-            SELECT 
-                p.id,
-                p.title,
-                p.content,
-                p.upvotes,
-                p.created_at,
-                u.id          AS author_id,
-                u.username    AS author_name,
-                u.avatar_color AS author_color,
-                COUNT(c.id)   AS comment_count
-            FROM posts p
-            JOIN users u ON p.user_id = u.id
-            LEFT JOIN comments c ON c.post_id = p.id
-            GROUP BY p.id, u.id, u.username, u.avatar_color
-            ORDER BY p.created_at DESC
-            LIMIT $1 OFFSET $2
-        `, [limit, offset]);
+        // Obtener posts con autor y comentarios (para contar)
+        const { data: posts, error } = await supabase
+            .from('posts')
+            .select('id, title, content, upvotes, created_at, users!inner(id, username, avatar_color), comments(id)')
+            .order('created_at', { ascending: false })
+            .range(offset, offset + limit - 1);
+
+        if (error) throw error;
 
         // Total de posts para paginación
-        const countResult = await query('SELECT COUNT(*) AS total FROM posts');
-        const total = parseInt(countResult.rows[0].total);
+        const { count: total } = await supabase
+            .from('posts')
+            .select('id', { count: 'exact', head: true });
+
+        // Transformar a formato que espera el frontend
+        const formattedPosts = (posts || []).map(p => ({
+            id:            p.id,
+            title:         p.title,
+            content:       p.content,
+            upvotes:       p.upvotes,
+            created_at:    p.created_at,
+            author_id:     p.users.id,
+            author_name:   p.users.username,
+            author_color:  p.users.avatar_color,
+            comment_count: String(p.comments?.length || 0)
+        }));
 
         res.json({
             success: true,
             data: {
-                posts: result.rows,
+                posts: formattedPosts,
                 pagination: {
                     page,
                     limit,
-                    total,
-                    totalPages: Math.ceil(total / limit)
+                    total:      total || 0,
+                    totalPages: Math.ceil((total || 0) / limit)
                 }
             }
         });
@@ -163,7 +144,6 @@ app.get('/api/posts', requireAuth, async (req, res) => {
 
 /**
  * POST /api/posts
- * Crear un nuevo post (requiere autenticación)
  * Body: { title, content }
  */
 app.post('/api/posts', requireAuth, async (req, res) => {
@@ -180,28 +160,27 @@ app.post('/api/posts', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'El título no puede exceder 300 caracteres' });
         }
 
-        // Insertar el post dentro de una transacción (garantía ACID)
-        const result = await withTransaction(async (client) => {
-            const postResult = await client.query(`
-                INSERT INTO posts (user_id, title, content)
-                VALUES ($1, $2, $3)
-                RETURNING id, title, content, upvotes, created_at
-            `, [req.user.id, title.trim(), content.trim()]);
+        const { data: post, error } = await supabase
+            .from('posts')
+            .insert({
+                user_id: req.user.id,
+                title:   title.trim(),
+                content: content.trim()
+            })
+            .select('id, title, content, upvotes, created_at')
+            .single();
 
-            return postResult.rows[0];
-        });
+        if (error) throw error;
 
-        // Enriquecer con datos del autor para la respuesta
         const newPost = {
-            ...result,
-            author_id: req.user.id,
-            author_name: req.user.username,
-            author_color: req.user.avatar_color,
+            ...post,
+            author_id:     req.user.id,
+            author_name:   req.user.username,
+            author_color:  req.user.avatar_color,
             comment_count: '0'
         };
 
-        console.log(`📝 Nuevo post creado: "${newPost.title}" por ${req.user.username}`);
-
+        console.log(`📝 Nuevo post: "${newPost.title}" por ${req.user.username}`);
         res.status(201).json({ success: true, data: newPost });
     } catch (error) {
         console.error('Error creando post:', error.message);
@@ -211,22 +190,28 @@ app.post('/api/posts', requireAuth, async (req, res) => {
 
 /**
  * POST /api/posts/:id/upvote
- * Dar upvote a un post
  */
 app.post('/api/posts/:id/upvote', requireAuth, async (req, res) => {
     try {
         const postId = parseInt(req.params.id);
 
-        const result = await query(
-            'UPDATE posts SET upvotes = upvotes + 1 WHERE id = $1 RETURNING upvotes',
-            [postId]
-        );
+        const { data: current } = await supabase
+            .from('posts')
+            .select('upvotes')
+            .eq('id', postId)
+            .single();
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Post no encontrado' });
-        }
+        if (!current) return res.status(404).json({ error: 'Post no encontrado' });
 
-        res.json({ success: true, upvotes: result.rows[0].upvotes });
+        const { data: updated, error } = await supabase
+            .from('posts')
+            .update({ upvotes: current.upvotes + 1 })
+            .eq('id', postId)
+            .select('upvotes')
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, upvotes: updated.upvotes });
     } catch (error) {
         res.status(500).json({ error: 'Error al actualizar votos' });
     }
@@ -238,11 +223,7 @@ app.post('/api/posts/:id/upvote', requireAuth, async (req, res) => {
 
 /**
  * GET /api/posts/:id/comments
- * Obtener TODOS los comentarios de un post ordenados para
- * reconstruir el árbol binario en el frontend.
- * 
- * Los comentarios se ordenan por 'path' (ruta materializada)
- * para mantener el orden del árbol sin recursión en BD.
+ * Comentarios ordenados por path para reconstruir el árbol binario.
  */
 app.get('/api/posts/:id/comments', requireAuth, async (req, res) => {
     try {
@@ -253,40 +234,45 @@ app.get('/api/posts/:id/comments', requireAuth, async (req, res) => {
         }
 
         // Verificar que el post existe
-        const postExists = await query('SELECT id FROM posts WHERE id = $1', [postId]);
-        if (postExists.rows.length === 0) {
+        const { data: post } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('id', postId)
+            .single();
+
+        if (!post) {
             return res.status(404).json({ error: 'Post no encontrado' });
         }
 
-        // Obtener comentarios ordenados por path para preservar estructura del árbol
-        // El ORDER BY path garantiza que los padres siempre vengan antes que sus hijos
-        const result = await query(`
-            SELECT 
-                c.id,
-                c.post_id,
-                c.parent_id,
-                c.content,
-                c.depth,
-                c.upvotes,
-                c.path,
-                c.created_at,
-                u.id          AS author_id,
-                u.username    AS author_name,
-                u.avatar_color AS author_color
-            FROM comments c
-            JOIN users u ON c.user_id = u.id
-            WHERE c.post_id = $1
-            ORDER BY c.path ASC, c.created_at ASC
-        `, [postId]);
+        // Obtener comentarios con datos del autor, ordenados por path
+        const { data: comments, error } = await supabase
+            .from('comments')
+            .select('id, post_id, parent_id, content, depth, upvotes, path, created_at, users!inner(id, username, avatar_color)')
+            .eq('post_id', postId)
+            .order('path', { ascending: true })
+            .order('created_at', { ascending: true });
 
-        // NOTA EDUCATIVA: El frontend recibe una lista plana de comentarios
-        // con parent_id. La clase CommentTree en script.js los convierte
-        // a la estructura de árbol binario para renderizado recursivo.
+        if (error) throw error;
+
+        // Transformar al formato plano que espera el frontend
+        const formattedComments = (comments || []).map(c => ({
+            id:           c.id,
+            post_id:      c.post_id,
+            parent_id:    c.parent_id,
+            content:      c.content,
+            depth:        c.depth,
+            upvotes:      c.upvotes,
+            path:         c.path,
+            created_at:   c.created_at,
+            author_id:    c.users.id,
+            author_name:  c.users.username,
+            author_color: c.users.avatar_color
+        }));
 
         res.json({
             success: true,
-            data: result.rows,
-            count: result.rows.length,
+            data:    formattedComments,
+            count:   formattedComments.length,
             educational_note:
                 'Los comentarios se envían como lista plana con parent_id. ' +
                 'El frontend los convierte a un Árbol Binario usando la clase CommentTree.'
@@ -299,12 +285,8 @@ app.get('/api/posts/:id/comments', requireAuth, async (req, res) => {
 
 /**
  * POST /api/posts/:id/comments
- * Crear un nuevo comentario en un post
  * Body: { content, parent_id? }
- * 
- * ACID: Toda la inserción ocurre en una transacción.
- * El trigger de PostgreSQL (trg_update_comment_path) 
- * actualiza automáticamente depth y path.
+ * El trigger de PostgreSQL calcula depth y path automáticamente.
  */
 app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
     try {
@@ -314,59 +296,60 @@ app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
         if (!content || content.trim().length === 0) {
             return res.status(400).json({ error: 'El contenido del comentario es requerido' });
         }
-
         if (content.trim().length > 10000) {
             return res.status(400).json({ error: 'El comentario es demasiado largo (max 10,000 caracteres)' });
         }
 
-        const result = await withTransaction(async (client) => {
-            // Verificar que el post existe (CONSISTENCIA ACID)
-            const postCheck = await client.query(
-                'SELECT id FROM posts WHERE id = $1',
-                [postId]
-            );
+        // Verificar que el post existe
+        const { data: post } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('id', postId)
+            .single();
 
-            if (postCheck.rows.length === 0) {
-                throw new Error('El post no existe');
+        if (!post) {
+            return res.status(400).json({ error: 'El post no existe' });
+        }
+
+        // Si hay parent_id, verificar que existe y no excede profundidad máxima
+        if (parent_id) {
+            const { data: parent } = await supabase
+                .from('comments')
+                .select('id, depth')
+                .eq('id', parent_id)
+                .eq('post_id', postId)
+                .single();
+
+            if (!parent) {
+                return res.status(400).json({ error: 'El comentario padre no existe en este post' });
             }
-
-            // Si hay parent_id, verificar que el comentario padre existe
-            // y pertenece al mismo post (CONSISTENCIA ACID)
-            if (parent_id) {
-                const parentCheck = await client.query(
-                    'SELECT id, depth FROM comments WHERE id = $1 AND post_id = $2',
-                    [parent_id, postId]
-                );
-
-                if (parentCheck.rows.length === 0) {
-                    throw new Error('El comentario padre no existe en este post');
-                }
-
-                if (parentCheck.rows[0].depth >= 10) {
-                    throw new Error('Se alcanzó la profundidad máxima de anidamiento (10 niveles)');
-                }
+            if (parent.depth >= 10) {
+                return res.status(400).json({ error: 'Se alcanzó la profundidad máxima de anidamiento (10 niveles)' });
             }
+        }
 
-            // Insertar el comentario
-            // El trigger de PostgreSQL calcula automáticamente depth y path
-            const commentResult = await client.query(`
-                INSERT INTO comments (post_id, user_id, parent_id, content)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id, post_id, parent_id, content, depth, upvotes, path, created_at
-            `, [postId, req.user.id, parent_id || null, content.trim()]);
+        // Insertar el comentario — el trigger de PostgreSQL calcula depth y path
+        const { data: comment, error } = await supabase
+            .from('comments')
+            .insert({
+                post_id:   postId,
+                user_id:   req.user.id,
+                parent_id: parent_id || null,
+                content:   content.trim()
+            })
+            .select('id, post_id, parent_id, content, depth, upvotes, path, created_at')
+            .single();
 
-            return commentResult.rows[0];
-        });
+        if (error) throw error;
 
         const newComment = {
-            ...result,
-            author_id: req.user.id,
-            author_name: req.user.username,
+            ...comment,
+            author_id:    req.user.id,
+            author_name:  req.user.username,
             author_color: req.user.avatar_color
         };
 
-        console.log(`💬 Nuevo comentario (depth: ${newComment.depth}) en post ${postId} por ${req.user.username}`);
-
+        console.log(`💬 Comentario (depth: ${newComment.depth}) en post ${postId} por ${req.user.username}`);
         res.status(201).json({ success: true, data: newComment });
     } catch (error) {
         console.error('Error creando comentario:', error.message);
@@ -378,30 +361,35 @@ app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
 
 /**
  * POST /api/comments/:id/upvote
- * Dar upvote a un comentario
  */
 app.post('/api/comments/:id/upvote', requireAuth, async (req, res) => {
     try {
         const commentId = parseInt(req.params.id);
 
-        const result = await query(
-            'UPDATE comments SET upvotes = upvotes + 1 WHERE id = $1 RETURNING upvotes',
-            [commentId]
-        );
+        const { data: current } = await supabase
+            .from('comments')
+            .select('upvotes')
+            .eq('id', commentId)
+            .single();
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'Comentario no encontrado' });
-        }
+        if (!current) return res.status(404).json({ error: 'Comentario no encontrado' });
 
-        res.json({ success: true, upvotes: result.rows[0].upvotes });
+        const { data: updated, error } = await supabase
+            .from('comments')
+            .update({ upvotes: current.upvotes + 1 })
+            .eq('id', commentId)
+            .select('upvotes')
+            .single();
+
+        if (error) throw error;
+        res.json({ success: true, upvotes: updated.upvotes });
     } catch (error) {
         res.status(500).json({ error: 'Error al actualizar votos' });
     }
 });
 
 // ============================================================
-// RUTA: Servir el frontend para todas las rutas no-API
-// (SPA fallback)
+// SPA FALLBACK — Servir frontend para rutas no-API
 // ============================================================
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
@@ -421,25 +409,19 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// AUTO-SETUP: Verificar que las tablas existen
-// Las tablas se crean directamente en Supabase Dashboard
+// VERIFICAR CONEXIÓN A SUPABASE AL INICIAR
 // ============================================================
 const autoSetupDatabase = async () => {
     try {
-        const check = await query(`
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_schema = 'public' AND table_name = 'users'
-            ) AS exists
-        `);
-
-        if (check.rows[0].exists) {
-            console.log('✅ Tablas de base de datos verificadas');
+        const { error } = await supabase.from('users').select('id').limit(1);
+        if (error) {
+            console.error('❌ Error conectando a Supabase:', error.message);
+            console.error('   Verifica SUPABASE_URL y SUPABASE_SERVICE_ROLE en Vercel.');
         } else {
-            console.error('❌ Las tablas no existen. Créalas desde el Dashboard de Supabase.');
+            console.log('✅ Conexión a Supabase verificada — tablas OK');
         }
     } catch (err) {
-        console.error('⚠️  Error verificando tablas:', err.message);
+        console.error('⚠️  Error al verificar Supabase:', err.message);
     }
 };
 
@@ -450,17 +432,6 @@ const startServer = async () => {
     console.log('\n🤖 Iniciando Freedit...');
     console.log('   Materia: Programación No Numérica\n');
 
-    // Verificar conexión a la base de datos
-    const dbConnected = await testConnection();
-
-    if (!dbConnected) {
-        console.error('\n❌ No se pudo conectar a la base de datos.');
-        console.error('   Verifica tu archivo .env y que el servicio PostgreSQL esté corriendo.');
-        console.error('   Windows: Busca "Servicios" → postgresql-x64-18 → Iniciar\n');
-        process.exit(1);
-    }
-
-    // Auto-crear tablas si es la primera vez
     await autoSetupDatabase();
 
     app.listen(PORT, () => {
@@ -470,7 +441,7 @@ const startServer = async () => {
     });
 };
 
-// Si estamos en Vercel, no iniciamos el servidor manualmente, solo exportamos app
+// Si estamos en Vercel, no iniciamos el servidor manualmente
 if (!process.env.VERCEL) {
     startServer();
 }

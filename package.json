@@ -9,6 +9,7 @@
     "db:setup": "node src/db/setup.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.105.3",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -20,7 +21,12 @@
   "devDependencies": {
     "nodemon": "^3.1.0"
   },
-  "keywords": ["binary-tree", "reddit", "educational", "postgresql"],
+  "keywords": [
+    "binary-tree",
+    "reddit",
+    "educational",
+    "postgresql"
+  ],
   "author": "Programación No Numérica",
   "license": "MIT"
 }
