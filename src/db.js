@@ -21,21 +21,16 @@ const poolConfig = {
     // Configuración del pool
     max:              10,    // Máximo de conexiones simultáneas
     idleTimeoutMillis: 30000, // Cerrar conexiones inactivas después de 30s
-    connectionTimeoutMillis: 2000, // Timeout al intentar obtener una conexión
+    connectionTimeoutMillis: 5000, // Timeout al intentar obtener una conexión
 };
 
-// Si existe POSTGRES_URL o DATABASE_URL (ej. Vercel Postgres, Neon, Render, Railway), úsala.
-const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+// Si existe DATABASE_URL (ej. Supabase, Neon, Vercel Postgres), úsala.
+const connectionString = process.env.DATABASE_URL;
 
 if (connectionString) {
     poolConfig.connectionString = connectionString;
-    // Railway no soporta SSL de forma nativa en su plugin básico.
-    // Neon, Supabase y Vercel Postgres SI requieren SSL.
-    const isRailway = connectionString.includes('railway');
-    
-    if (!isRailway && (process.env.NODE_ENV === 'production' || connectionString.includes('supabase') || connectionString.includes('neon') || connectionString.includes('vercel') || connectionString.includes('render'))) {
-        poolConfig.ssl = { rejectUnauthorized: false };
-    }
+    // Supabase, Neon y otros proveedores cloud requieren SSL
+    poolConfig.ssl = { rejectUnauthorized: false };
 } else {
     // Modo local tradicional
     poolConfig.host     = process.env.DB_HOST     || 'localhost';
@@ -55,7 +50,10 @@ pool.on('connect', () => {
 // Evento: error en el pool (conexiones inesperadamente cerradas, etc.)
 pool.on('error', (err) => {
     console.error('❌ Error inesperado en el pool de PostgreSQL:', err.message);
-    process.exit(-1);
+    // No hacer process.exit en serverless (Vercel)
+    if (!process.env.VERCEL) {
+        process.exit(-1);
+    }
 });
 
 // ============================================================

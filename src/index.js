@@ -14,7 +14,6 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
 require('dotenv').config();
 
 const { testConnection, query, withTransaction, pool } = require('./db');
@@ -422,12 +421,11 @@ app.use((err, req, res, next) => {
 });
 
 // ============================================================
-// AUTO-SETUP: Crear tablas automáticamente si no existen
-// Esto soluciona el error "relation users does not exist"
+// AUTO-SETUP: Verificar que las tablas existen
+// Las tablas se crean directamente en Supabase Dashboard
 // ============================================================
 const autoSetupDatabase = async () => {
     try {
-        // Verificar si la tabla users ya existe
         const check = await query(`
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
@@ -437,36 +435,11 @@ const autoSetupDatabase = async () => {
 
         if (check.rows[0].exists) {
             console.log('✅ Tablas de base de datos verificadas');
-            return;
-        }
-
-        console.log('⚙️  Primera ejecución: creando tablas automáticamente...');
-
-        // Leer el archivo database.sql y ejecutarlo
-        const sqlPath = path.join(__dirname, '..', 'database.sql');
-        if (!fs.existsSync(sqlPath)) {
-            console.error('❌ No se encontró database.sql');
-            return;
-        }
-
-        const sql = fs.readFileSync(sqlPath, 'utf8');
-
-        // Ejecutar el SQL completo usando el pool directamente
-        const client = await pool.connect();
-        try {
-            await client.query(sql);
-            console.log('✅ Tablas creadas exitosamente');
-            console.log('✅ Datos de ejemplo insertados');
-        } finally {
-            client.release();
+        } else {
+            console.error('❌ Las tablas no existen. Créalas desde el Dashboard de Supabase.');
         }
     } catch (err) {
-        // Si el error es por datos duplicados (re-ejecución parcial), continuar
-        if (err.message.includes('already exists') || err.message.includes('duplicate')) {
-            console.log('✅ Tablas ya existentes, continuando...');
-        } else {
-            console.error('⚠️  Error en auto-setup:', err.message);
-        }
+        console.error('⚠️  Error verificando tablas:', err.message);
     }
 };
 
