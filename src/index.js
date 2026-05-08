@@ -1,3 +1,4 @@
+
 // ============================================================
 // index.js - Servidor Principal Express
 // Materia: Programación No Numérica
@@ -10,16 +11,16 @@
 //   - Servicio de archivos estáticos del frontend
 // ============================================================
 
-const express  = require('express');
-const cors     = require('cors');
-const path     = require('path');
-const fs       = require('fs');
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const { testConnection, query, withTransaction, pool } = require('./db');
-const { registerUser, loginUser, requireAuth }         = require('./auth');
+const { registerUser, loginUser, requireAuth } = require('./auth');
 
-const app  = express();
+const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ============================================================
@@ -34,7 +35,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // CORS: permitir peticiones desde el frontend (mismo origen en producción)
 app.use(cors({
-    origin:      process.env.NODE_ENV === 'production' ? false : '*',
+    origin: process.env.NODE_ENV === 'production' ? false : '*',
     credentials: true
 }));
 
@@ -54,10 +55,10 @@ app.post('/api/auth/register', async (req, res) => {
     try {
         const { username, password } = req.body;
         const result = await registerUser(username, password);
-        res.status(201).json({ 
-            success: true, 
+        res.status(201).json({
+            success: true,
             message: `¡Bienvenido, ${result.user.username}!`,
-            ...result 
+            ...result
         });
     } catch (error) {
         console.error('Error en registro:', error.message);
@@ -74,10 +75,10 @@ app.post('/api/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
         const result = await loginUser(username, password);
-        res.json({ 
-            success: true, 
+        res.json({
+            success: true,
             message: `¡Hola de vuelta, ${result.user.username}!`,
-            ...result 
+            ...result
         });
     } catch (error) {
         console.error('Error en login:', error.message);
@@ -116,7 +117,7 @@ app.get('/api/auth/me', requireAuth, async (req, res) => {
  */
 app.get('/api/posts', requireAuth, async (req, res) => {
     try {
-        const page  = parseInt(req.query.page)  || 1;
+        const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const offset = (page - 1) * limit;
 
@@ -146,7 +147,7 @@ app.get('/api/posts', requireAuth, async (req, res) => {
         res.json({
             success: true,
             data: {
-                posts:       result.rows,
+                posts: result.rows,
                 pagination: {
                     page,
                     limit,
@@ -169,7 +170,7 @@ app.get('/api/posts', requireAuth, async (req, res) => {
 app.post('/api/posts', requireAuth, async (req, res) => {
     try {
         const { title, content } = req.body;
-        
+
         if (!title || title.trim().length === 0) {
             return res.status(400).json({ error: 'El título es requerido' });
         }
@@ -194,14 +195,14 @@ app.post('/api/posts', requireAuth, async (req, res) => {
         // Enriquecer con datos del autor para la respuesta
         const newPost = {
             ...result,
-            author_id:    req.user.id,
-            author_name:  req.user.username,
+            author_id: req.user.id,
+            author_name: req.user.username,
             author_color: req.user.avatar_color,
             comment_count: '0'
         };
 
         console.log(`📝 Nuevo post creado: "${newPost.title}" por ${req.user.username}`);
-        
+
         res.status(201).json({ success: true, data: newPost });
     } catch (error) {
         console.error('Error creando post:', error.message);
@@ -216,16 +217,16 @@ app.post('/api/posts', requireAuth, async (req, res) => {
 app.post('/api/posts/:id/upvote', requireAuth, async (req, res) => {
     try {
         const postId = parseInt(req.params.id);
-        
+
         const result = await query(
             'UPDATE posts SET upvotes = upvotes + 1 WHERE id = $1 RETURNING upvotes',
             [postId]
         );
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Post no encontrado' });
         }
-        
+
         res.json({ success: true, upvotes: result.rows[0].upvotes });
     } catch (error) {
         res.status(500).json({ error: 'Error al actualizar votos' });
@@ -247,7 +248,7 @@ app.post('/api/posts/:id/upvote', requireAuth, async (req, res) => {
 app.get('/api/posts/:id/comments', requireAuth, async (req, res) => {
     try {
         const postId = parseInt(req.params.id);
-        
+
         if (isNaN(postId)) {
             return res.status(400).json({ error: 'ID de post inválido' });
         }
@@ -283,11 +284,11 @@ app.get('/api/posts/:id/comments', requireAuth, async (req, res) => {
         // con parent_id. La clase CommentTree en script.js los convierte
         // a la estructura de árbol binario para renderizado recursivo.
 
-        res.json({ 
-            success: true, 
-            data:    result.rows,
-            count:   result.rows.length,
-            educational_note: 
+        res.json({
+            success: true,
+            data: result.rows,
+            count: result.rows.length,
+            educational_note:
                 'Los comentarios se envían como lista plana con parent_id. ' +
                 'El frontend los convierte a un Árbol Binario usando la clase CommentTree.'
         });
@@ -308,13 +309,13 @@ app.get('/api/posts/:id/comments', requireAuth, async (req, res) => {
  */
 app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
     try {
-        const postId   = parseInt(req.params.id);
+        const postId = parseInt(req.params.id);
         const { content, parent_id } = req.body;
-        
+
         if (!content || content.trim().length === 0) {
             return res.status(400).json({ error: 'El contenido del comentario es requerido' });
         }
-        
+
         if (content.trim().length > 10000) {
             return res.status(400).json({ error: 'El comentario es demasiado largo (max 10,000 caracteres)' });
         }
@@ -322,10 +323,10 @@ app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
         const result = await withTransaction(async (client) => {
             // Verificar que el post existe (CONSISTENCIA ACID)
             const postCheck = await client.query(
-                'SELECT id FROM posts WHERE id = $1', 
+                'SELECT id FROM posts WHERE id = $1',
                 [postId]
             );
-            
+
             if (postCheck.rows.length === 0) {
                 throw new Error('El post no existe');
             }
@@ -337,11 +338,11 @@ app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
                     'SELECT id, depth FROM comments WHERE id = $1 AND post_id = $2',
                     [parent_id, postId]
                 );
-                
+
                 if (parentCheck.rows.length === 0) {
                     throw new Error('El comentario padre no existe en este post');
                 }
-                
+
                 if (parentCheck.rows[0].depth >= 10) {
                     throw new Error('Se alcanzó la profundidad máxima de anidamiento (10 niveles)');
                 }
@@ -360,18 +361,18 @@ app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
 
         const newComment = {
             ...result,
-            author_id:    req.user.id,
-            author_name:  req.user.username,
+            author_id: req.user.id,
+            author_name: req.user.username,
             author_color: req.user.avatar_color
         };
 
         console.log(`💬 Nuevo comentario (depth: ${newComment.depth}) en post ${postId} por ${req.user.username}`);
-        
+
         res.status(201).json({ success: true, data: newComment });
     } catch (error) {
         console.error('Error creando comentario:', error.message);
-        const statusCode = error.message.includes('no existe') || 
-                           error.message.includes('profundidad') ? 400 : 500;
+        const statusCode = error.message.includes('no existe') ||
+            error.message.includes('profundidad') ? 400 : 500;
         res.status(statusCode).json({ success: false, error: error.message });
     }
 });
@@ -383,16 +384,16 @@ app.post('/api/posts/:id/comments', requireAuth, async (req, res) => {
 app.post('/api/comments/:id/upvote', requireAuth, async (req, res) => {
     try {
         const commentId = parseInt(req.params.id);
-        
+
         const result = await query(
             'UPDATE comments SET upvotes = upvotes + 1 WHERE id = $1 RETURNING upvotes',
             [commentId]
         );
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Comentario no encontrado' });
         }
-        
+
         res.json({ success: true, upvotes: result.rows[0].upvotes });
     } catch (error) {
         res.status(500).json({ error: 'Error al actualizar votos' });
@@ -412,11 +413,11 @@ app.get('*', (req, res) => {
 // ============================================================
 app.use((err, req, res, next) => {
     console.error('Error no manejado:', err);
-    res.status(500).json({ 
-        success: false, 
-        error: process.env.NODE_ENV === 'production' 
-            ? 'Error interno del servidor' 
-            : err.message 
+    res.status(500).json({
+        success: false,
+        error: process.env.NODE_ENV === 'production'
+            ? 'Error interno del servidor'
+            : err.message
     });
 });
 
@@ -475,10 +476,10 @@ const autoSetupDatabase = async () => {
 const startServer = async () => {
     console.log('\n🤖 Iniciando Freedit...');
     console.log('   Materia: Programación No Numérica\n');
-    
+
     // Verificar conexión a la base de datos
     const dbConnected = await testConnection();
-    
+
     if (!dbConnected) {
         console.error('\n❌ No se pudo conectar a la base de datos.');
         console.error('   Verifica tu archivo .env y que el servicio PostgreSQL esté corriendo.');
@@ -488,7 +489,7 @@ const startServer = async () => {
 
     // Auto-crear tablas si es la primera vez
     await autoSetupDatabase();
-    
+
     app.listen(PORT, () => {
         console.log(`\n✅ Freedit corriendo en http://localhost:${PORT}`);
         console.log(`   📊 Entorno: ${process.env.NODE_ENV || 'development'}`);
