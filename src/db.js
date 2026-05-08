@@ -28,8 +28,18 @@ const poolConfig = {
 const connectionString = process.env.DATABASE_URL;
 
 if (connectionString) {
-    poolConfig.connectionString = connectionString;
-    // Supabase, Neon y otros proveedores cloud requieren SSL
+    // Quitar sslmode de la URL para evitar conflicto con la config ssl del pool.
+    // node-postgres gestiona SSL vía poolConfig.ssl, no vía el query param.
+    const cleanConnectionString = connectionString
+        .replace(/[?&]sslmode=[^&]*/g, '')   // eliminar sslmode=...
+        .replace(/[?&]channel_binding=[^&]*/g, '') // eliminar channel_binding=...
+        .replace(/\?&/, '?')    // limpiar ?& residual
+        .replace(/\?$/, '');    // limpiar ? final si quedó solo
+
+    poolConfig.connectionString = cleanConnectionString;
+    
+    // Activar SSL con rejectUnauthorized:false para aceptar el certificado
+    // de Supabase/Neon (que usan CAs intermedias no reconocidas por Node.js)
     poolConfig.ssl = { rejectUnauthorized: false };
 } else {
     // Modo local tradicional
