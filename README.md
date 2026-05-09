@@ -1,4 +1,4 @@
-# TreeTalk – Simulador de Hilos con Árboles Binarios
+# Freedit – Simulador de Hilos con Árboles Binarios
 ### Materia: Programación No Numérica
 
 ## 📋 Paso 0 — Instalar Node.js y PostgreSQL (solo la primera vez)
