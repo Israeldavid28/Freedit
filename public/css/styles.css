@@ -849,14 +849,26 @@ body {
 /* ============================================================
    RESPONSIVE
    ============================================================ */
-@media (max-width: 600px) {
-  .navbar { padding: 0 1rem; }
-  .main-layout { padding: 1rem 0.75rem; }
+@media (max-width: 768px) {
+  .navbar { padding: 0 1rem; gap: 0.5rem; }
+  .nav-brand { width: auto; font-size: 1rem; }
+  .nav-search { display: none; }
+  .nav-right { width: auto; }
+  
+  .left-sidebar { display: none; }
+  .main-layout { max-width: 100%; padding: 1rem 0.75rem; }
+  
   .auth-card { padding: 1.5rem; }
+  .post-card-header { padding: 1rem 1rem 0.5rem; }
   .post-card-body { padding: 0.25rem 1rem 0.75rem; }
-  .comment-node[data-depth="3"] { margin-left: 54px; }
-  .comment-node[data-depth="4"] { margin-left: 64px; }
-  .comment-node[data-depth="5"] { margin-left: 70px; }
+  .post-card-footer { padding: 0.5rem 1rem; }
+  
+  .comment-node[data-depth="3"] { margin-left: 20px; }
+  .comment-node[data-depth="4"] { margin-left: 30px; }
+  .comment-node[data-depth="5"] { margin-left: 40px; }
+  
+  .site-footer { padding: 1rem; font-size: 0.75rem; }
+  .site-footer p { font-size: 0.75rem; }
 }
 
 /* ============================================================
@@ -881,10 +893,8 @@ body {
 }
 
 .auth-footer {
-  position: absolute;
-  bottom: 1.5rem;
-  left: 0;
-  width: 100%;
+  margin-top: 2rem;
+  padding: 0 1rem;
   text-align: center;
   font-size: 0.8rem;
   color: var(--text-muted);
